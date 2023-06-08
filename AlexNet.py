@@ -43,11 +43,14 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter('runs/conv-cifar100')
+
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Hyper-parameter
-num_epochs = 90
+num_epochs = 20
 batch_size = 128
 learning_rate = 0.01
 
@@ -76,8 +79,13 @@ test_loader = DataLoader(dataset=test_dataset,
                           shuffle=True)
 
 # Get first batch of images
-# examples = iter(test_loader)
-# images, labels = examples._next_data()
+examples = iter(test_loader)
+images, labels = examples._next_data()
+
+# Add images to tensorboard
+img_grid = torchvision.utils.make_grid(images)
+writer.add_image('Cifar100_images', img_grid)
+writer.close()
 
 # 1) Design model
 class AlexNet(nn.Module):
@@ -136,6 +144,8 @@ class AlexNet(nn.Module):
 
 # Add model graph to tensoroard
 model = AlexNet(num_classes=100).to(device)
+writer.add_graph(model, images.to(device))
+writer.close()
 
 # 2) Construct loss and optimizer
 cost = nn.CrossEntropyLoss()
@@ -159,8 +169,15 @@ for epoch in range(num_epochs):
         optimizer.step()
         optimizer.zero_grad() # Vaciar gradientes
 
+
         if (i+1) % 100 == 0:
+            running_loss = loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            running_correct = (predicted == labels).sum().item()
             print(f'Epoch: [{epoch+1}/{num_epochs}], step: [{i+1}/{n_total_steps}], loss = {loss.item():.4f}')
+            # Add scalar loss and training acc to Tensorboard
+            writer.add_scalar('Training loss', running_loss / 100, epoch * n_total_steps + i)
+            writer.add_scalar('Accuracy', running_correct / 100, epoch * n_total_steps + i)
 
 # Testing model
 with torch.no_grad():
