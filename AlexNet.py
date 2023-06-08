@@ -154,6 +154,9 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, 
 # 3) Training loop
 n_total_steps = len(train_loader)
 for epoch in range(num_epochs):
+    n_samples = 0
+    running_loss = 0.0
+    running_correct = 0
     for i, (images, labels) in enumerate(train_loader):
         images = images.to(device)
         labels = labels.to(device)
@@ -169,15 +172,25 @@ for epoch in range(num_epochs):
         optimizer.step()
         optimizer.zero_grad() # Vaciar gradientes
 
+        # Sum batch loss
+        running_loss += loss.item()
 
-        if (i+1) % 100 == 0:
-            running_loss = loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            running_correct = (predicted == labels).sum().item()
-            print(f'Epoch: [{epoch+1}/{num_epochs}], step: [{i+1}/{n_total_steps}], loss = {loss.item():.4f}')
-            # Add scalar loss and training acc to Tensorboard
-            writer.add_scalar('Training loss', running_loss / 100, epoch * n_total_steps + i)
-            writer.add_scalar('Accuracy', running_correct / 100, epoch * n_total_steps + i)
+        # Get predictions
+        _, predicted = torch.max(outputs.data, 1)
+
+        # Sum correct batch predictions
+        running_correct += (predicted == labels).sum().item()
+
+        # Sum real labels of batch
+        n_samples += labels.size(0)
+
+    # Get accuracy
+    acc = 100.0 * running_correct / n_samples
+    print(f'Epoch: [{epoch+1}/{num_epochs}], loss = {running_loss / n_total_steps:.4f}, acc = {acc}')
+    
+    # Add scalar loss and training acc to Tensorboard
+    writer.add_scalar('Training loss', running_loss / n_total_steps, epoch + 1)
+    writer.add_scalar('Accuracy', acc, epoch + 1)
 
 # Testing model
 with torch.no_grad():
@@ -188,9 +201,15 @@ with torch.no_grad():
         labels = labels.to(device)
         outputs = model(images)
 
+        # Get predictions
         _, predicted = torch.max(outputs, 1) # (value, index)
+
+        # Sum real labels of batch
         n_samples += labels.size(0)
+
+        # Sum correct batch predictions
         n_correct += (predicted == labels).sum().item()
     
+    # Get accuracy
     acc = 100.0 * n_correct / n_samples
     print(f'Accuracy = {acc}')
